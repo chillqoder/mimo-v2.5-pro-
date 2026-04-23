@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SVG Plant Growth</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
+    overflow: hidden;
+  }
+  svg {
+    width: 100vw;
+    height: 100vh;
+  }
+</style>
+</head>
+<body>
+<svg id="scene" viewBox="0 0 800 600" preserveAspectRatio="xMidYMax meet">
+  <defs>
+    <!-- Glow filter for particles -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Soft shadow for pot -->
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background stars -->
+  <g id="stars"></g>
+
+  <!-- Ground / Pot -->
+  <g id="pot-group" filter="url(#shadow)">
+    <ellipse cx="400" cy="580" rx="90" ry="12" fill="#5c3d2e"/>
+    <path d="M320 530 Q320 580 400 580 Q480 580 480 530 L470 500 Q400 510 330 500 Z" fill="#8B5E3C"/>
+    <path d="M330 500 Q400 510 470 500 L465 490 Q400 500 335 490 Z" fill="#A0724E"/>
+    <ellipse cx="400" cy="495" rx="72" ry="8" fill="#6B4226"/>
+    <ellipse cx="400" cy="495" rx="65" ry="5" fill="#4A2F1A"/>
+  </g>
+
+  <!-- Soil surface -->
+  <ellipse cx="400" cy="495" rx="60" ry="4" fill="#3d2b1f"/>
+
+  <!-- Main plant group -->
+  <g id="plant">
+    <!-- Stem path - will be animated -->
+    <g id="stem-group">
+      <path id="stem-main" d="" fill="none" stroke="#2d6a4f" stroke-width="4" stroke-linecap="round"/>
+      <path id="stem-shadow" d="" fill="none" stroke="#1b4332" stroke-width="6" stroke-linecap="round" opacity="0.3"/>
+    </g>
+    
+    <!-- Leaves container -->
+    <g id="leaves-group"></g>
+    
+    <!-- Flower/bud at top -->
+    <g id="flower-group" opacity="0"></g>
+  </g>
+
+  <!-- Floating particles -->
+  <g id="particles"></g>
+</svg>
+
+<script>
+(() => {
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const CYCLE_DURATION = 8000; // 8 seconds per full growth cycle
+  const WIND_BASE = 0.0012;
+  const WIND_GUST = 0.0008;
+
+  // --- Utility ---
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+  function easeInOut(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+  function easeIn(t) { return t * t * t; }
+  function smoothstep(edge0, edge1, x) {
+    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+    return t * t * (3 - 2 * t);
+  }
+
+  // Simple seeded random for consistent patterns
+  let seed = 42;
+  function seededRandom() {
+    seed = (seed * 16807 + 0) % 2147483647;
+    return (seed - 1) / 2147483646;
+  }
+
+  // --- Stars ---
+  function createStars() {
+    const g = document.getElementById('stars');
+    seed = 42;
+    for (let i = 0; i < 80; i++) {
+      const star = document.createElementNS(SVG_NS, 'circle');
+      star.setAttribute('cx', seededRandom() * 800);
+      star.setAttribute('cy', seededRandom() * 300);
+      star.setAttribute('r', seededRandom() * 1.5 + 0.3);
+      star.setAttribute('fill', '#fff');
+      star.setAttribute('opacity', seededRandom() * 0.6 + 0.2);
+      star.classList.add('star');
+      g.appendChild(star);
+    }
+  }
+
+  // --- Particles ---
+  const particles = [];
+  function spawnParticle(x, y) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: -Math.random() * 0.8 - 0.2,
+      life: 1,
+      decay: 0.005 + Math.random() * 0.01,
+      size: Math.random() * 2 + 0.5,
+      color: Math.random() > 0.5 ? '#95d5b2' : '#b7e4c7'
+    });
+  }
+
+  // --- Leaf definitions ---
+  const leafDefs = [
+    { height: 0.20, side: -1, size: 1.0, angle: -35, delay: 0 },
+    { height: 0.20, side: 1,  size: 0.85, angle: 30, delay: 0.08 },
+    { height: 0.40, side: -1, size: 1.1, angle: -40, delay: 0.15 },
+    { height: 0.40, side: 1,  size: 0.9, angle: 35, delay: 0.22 },
+    { height: 0.60, side: -1, size: 0.95, angle: -30, delay: 0.30 },
+    { height: 0.60, side: 1,  size: 1.05, angle: 40, delay: 0.37 },
+    { height: 0.78, side: -1, size: 0.8, angle: -25, delay: 0.44 },
+    { height: 0.78, side: 1,  size: 0.75, angle: 28, delay: 0.50 },
+    { height: 0.90, side: -1, size: 0.6, angle: -20, delay: 0.55 },
+    { height: 0.90, side: 1,  size: 0.55, angle: 22, delay: 0.58 },
+  ];
+
+  // Create leaf SVG elements
+  function createLeafElement(def, index) {
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('id', `leaf-${index}`);
+    g.setAttribute('opacity', '0');
+
+    // Leaf blade
+    const path = document.createElementNS(SVG_NS, 'path');
+    // Leaf shape: a nice organic leaf
+    const w = def.size * 28 * def.side;
+    const d = `M0,0 C${w*0.3},-5 ${w*0.8},-12 ${w},-8 C${w*1.1},-4 ${w*0.7},2 ${w*0.3},5 C${w*0.1},6 0,3 0,0 Z`;
+    path.setAttribute('d', d);
+    path.setAttribute('fill', '#52b788');
+    path.setAttribute('stroke', '#40916c');
+    path.setAttribute('stroke-width', '0.5');
+    path.classList.add('leaf-blade');
+
+    // Leaf vein
+    const vein = document.createElementNS(SVG_NS, 'path');
+    vein.setAttribute('d', `M0,0 Q${w*0.4},-3 ${w*0.85},-5`);
+    vein.setAttribute('fill', 'none');
+    vein.setAttribute('stroke', '#2d6a4f');
+    vein.setAttribute('stroke-width', '0.7');
+    vein.setAttribute('opacity', '0.6');
+
+    // Secondary veins
+    for (let i = 1; i <= 3; i++) {
+      const sv = document.createElementNS(SVG_NS, 'path');
+      const t = i / 4;
+      const sx = lerp(0, w * 0.85, t);
+      const sy = lerp(0, -5, t) - 2;
+      const ex = sx + (def.side > 0 ? 8 : -8);
+      const ey = sy - 6;
+      sv.setAttribute('d', `M${sx},${sy} Q${(sx+ex)/2},${ey+2} ${ex},${ey}`);
+      sv.setAttribute('fill', 'none');
+      sv.setAttribute('stroke', '#2d6a4f');
+      sv.setAttribute('stroke-width', '0.4');
+      sv.setAttribute('opacity', '0.4');
+      g.appendChild(sv);
+    }
+
+    g.appendChild(path);
+    g.appendChild(vein);
+    return g;
+  }
+
+  // Build stem path
+  function buildStemPath(progress, windPhase) {
+    const startX = 400;
+    const startY = 493;
+    const maxH = 320;
+    const h = maxH * easeOut(Math.min(1, progress));
+
+    if (h < 2) return '';
+
+    const segments = 20;
+    const segH = h / segments;
+    let d = `M${startX},${startY}`;
+
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      const y = startY - segH * i;
+      // Wind sway increases with height
+      const windInfluence = t * t;
+      const windOffset = Math.sin(windPhase + t * 3) * 12 * windInfluence +
+                         Math.sin(windPhase * 1.7 + t * 5) * 5 * windInfluence;
+      const x = startX + windOffset;
+
+      if (i === 1) {
+        d += ` L${x},${y}`;
+      } else {
+        const prevT = (i - 1) / segments;
+        const prevY = startY - segH * (i - 1);
+        const prevWind = prevT * prevT;
+        const prevX = startX + Math.sin(windPhase + prevT * 3) * 12 * prevWind +
+                      Math.sin(windPhase * 1.7 + prevT * 5) * 5 * prevWind;
+        const cpx = (prevX + x) / 2;
+        const cpy = (prevY + y) / 2;
+        d += ` Q${prevX},${prevY - segH * 0.3} ${x},${y}`;
+      }
+    }
+
+    return d;
+  }
+
+  // Get point on stem at given t (0=base, 1=top)
+  function getStemPoint(t, progress, windPhase) {
+    const startX = 400;
+    const startY = 493;
+    const maxH = 320;
+    const h = maxH * easeOut(Math.min(1, progress));
+    const actualT = Math.min(1, t / Math.max(0.001, progress));
+
+    const y = startY - h * actualT;
+    const windInfluence = actualT * actualT;
+    const x = startX + Math.sin(windPhase + actualT * 3) * 12 * windInfluence +
+              Math.sin(windPhase * 1.7 + actualT * 5) * 5 * windInfluence;
+
+    return { x, y };
+  }
+
+  // --- Leaf rendering ---
+  const leafElements = [];
+  const leavesGroup = document.getElementById('leaves-group');
+
+  leafDefs.forEach((def, i) => {
+    const el = createLeafElement(def, i);
+    leavesGroup.appendChild(el);
+    leafElements.push(el);
+  });
+
+  createStars();
+
+  // --- Animation state ---
+  let startTime = null;
+  const stemMain = document.getElementById('stem-main');
+  const stemShadow = document.getElementById('stem-shadow');
+  const flowerGroup = document.getElementById('flower-group');
+
+  // Create flower parts
+  const petalCount = 6;
+  for (let i = 0; i < petalCount; i++) {
+    const petal = document.createElementNS(SVG_NS, 'ellipse');
+    petal.setAttribute('rx', '8');
+    petal.setAttribute('ry', '4');
+    petal.setAttribute('fill', i % 2 === 0 ? '#f8961e' : '#f9c74f');
+    petal.setAttribute('opacity', '0.9');
+    petal.setAttribute('transform', `rotate(${i * 60})`);
+    petal.classList.add('petal');
+    flowerGroup.appendChild(petal);
+  }
+  // Center
+  const center = document.createElementNS(SVG_NS, 'circle');
+  center.setAttribute('r', '5');
+  center.setAttribute('fill', '#f94144');
+  flowerGroup.appendChild(center);
+
+  function animate(timestamp) {
+    if (!startTime) startTime = timestamp;
+    const elapsed = timestamp - startTime;
+
+    // --- Phase calculation ---
+    // 0-0.5: growth, 0.5-0.8: full bloom + wind, 0.8-1.0: wilt/fade
+    const rawCycle = (elapsed % CYCLE_DURATION) / CYCLE_DURATION;
+    
+    // Growth progress (0→1)
+    let growT;
+    let fadeT = 0;
+    if (rawCycle < 0.5) {
+      growT = easeOut(rawCycle / 0.5);
+    } else if (rawCycle < 0.8) {
+      growT = 1;
+    } else {
+      // Wilt: stem retracts, leaves fold
+      const wiltProgress = (rawCycle - 0.8) / 0.2;
+      growT = 1 - easeIn(wiltProgress);
+      fadeT = easeIn(wiltProgress);
+    }
+
+    // Wind
+    const windTime = elapsed * WIND_BASE;
+    const gust = Math.sin(elapsed * WIND_GUST * 2.3) * 0.5 + 0.5;
+    const windPhase = windTime + gust * 0.3;
+
+    // --- Update stem ---
+    const stemPath = buildStemPath(growT, windPhase);
+    stemMain.setAttribute('d', stemPath);
+    stemShadow.setAttribute('d', stemPath);
+
+    // Stem color shifts as it grows
+    const greenVal = Math.floor(lerp(60, 106, growT));
+    stemMain.setAttribute('stroke', `rgb(45, ${greenVal}, 79)`);
+
+    // --- Update leaves ---
+    leafDefs.forEach((def, i) => {
+      const el = leafElements[i];
+      const leafGrowStart = def.delay;
+      const leafGrowEnd = def.delay + 0.3;
+
+      if (growT < leafGrowStart) {
+        el.setAttribute('opacity', '0');
+        return;
+      }
+
+      let leafT = smoothstep(leafGrowStart, leafGrowEnd, growT);
+
+      // Wilt: leaves droop and fade
+      if (fadeT > 0) {
+        const leafWilt = smoothstep(0, 0.5 + i * 0.05, fadeT);
+        leafT *= (1 - leafWilt);
+      }
+
+      if (leafT <= 0) {
+        el.setAttribute('opacity', '0');
+        return;
+      }
+
+      // Position on stem
+      const stemPoint = getStemPoint(def.height, growT, windPhase);
+
+      // Unfurl: starts rolled, then opens
+      const unfurlT = easeOut(Math.min(1, leafT * 1.5));
+      const baseAngle = def.angle * unfurlT;
+
+      // Wind effect on leaf
+      const leafWind = Math.sin(windPhase * 1.3 + def.height * 5 + i) * 8 * def.height +
+                       Math.sin(windPhase * 2.7 + i * 1.3) * 3;
+      const windAngle = leafWind * unfurlT;
+
+      // Springy oscillation during growth
+      let springAngle = 0;
+      if (leafT < 1 && leafT > 0) {
+        const springPhase = (1 - leafT) * Math.PI * 3;
+        springAngle = Math.sin(springPhase) * 5 * (1 - leafT);
+      }
+
+      const totalAngle = baseAngle + windAngle + springAngle;
+      const scale = leafT;
+
+      el.setAttribute('transform', 
+        `translate(${stemPoint.x}, ${stemPoint.y}) rotate(${totalAngle}) scale(${scale})`);
+      el.setAttribute('opacity', Math.min(1, leafT * 2));
+
+      // Leaf color: lighter when young, darker when mature
+      const blade = el.querySelector('.leaf-blade');
+      if (blade) {
+        const r = Math.floor(lerp(120, 82, leafT));
+        const g = Math.floor(lerp(200, 183, leafT));
+        const b = Math.floor(lerp(160, 136, leafT));
+        blade.setAttribute('fill', `rgb(${r},${g},${b})`);
+      }
+    });
+
+    // --- Flower ---
+    const flowerT = smoothstep(0.75, 0.95, growT);
+    if (flowerT > 0 && fadeT < 0.5) {
+      const topPoint = getStemPoint(1, growT, windPhase);
+      flowerGroup.setAttribute('transform', `translate(${topPoint.x}, ${topPoint.y})`);
+      
+      const flowerScale = easeOut(flowerT) * (1 - fadeT * 2);
+      flowerGroup.setAttribute('opacity', Math.max(0, flowerScale));
+      
+      // Animate petals opening
+      const petals = flowerGroup.querySelectorAll('.petal');
+      petals.forEach((petal, i) => {
+        const openT = easeOut(Math.min(1, flowerT * 1.3));
+        const spread = 8 + openT * 10;
+        const angle = i * 60 + Math.sin(windPhase * 2 + i) * 3;
+        petal.setAttribute('ry', 4 + openT * 3);
+        petal.setAttribute('transform', 
+          `rotate(${angle}) translate(0, -${spread}) scale(${openT})`);
+      });
+    } else {
+      flowerGroup.setAttribute('opacity', '0');
+    }
+
+    // --- Particles (pollen / sparkles during bloom) ---
+    if (growT > 0.8 && growT < 1 && Math.random() < 0.3) {
+      const topPoint = getStemPoint(1, growT, windPhase);
+      spawnParticle(
+        topPoint.x + (Math.random() - 0.5) * 20,
+        topPoint.y + (Math.random() - 0.5) * 15
+      );
+    }
+
+    // Update particles
+    const particlesGroup = document.getElementById('particles');
+    // Clear old particles
+    while (particlesGroup.firstChild) {
+      particlesGroup.removeChild(particlesGroup.firstChild);
+    }
+    
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx + Math.sin(windPhase * 2 + i) * 0.2;
+      p.y += p.vy;
+      p.life -= p.decay;
+      
+      if (p.life <= 0) {
+        particles.splice(i, 1);
+        continue;
+      }
+
+      const c = document.createElementNS(SVG_NS, 'circle');
+      c.setAttribute('cx', p.x);
+      c.setAttribute('cy', p.y);
+      c.setAttribute('r', p.size * p.life);
+      c.setAttribute('fill', p.color);
+      c.setAttribute('opacity', p.life * 0.7);
+      c.setAttribute('filter', 'url(#glow)');
+      particlesGroup.appendChild(c);
+    }
+
+    // --- Stars twinkle ---
+    const stars = document.querySelectorAll('.star');
+    stars.forEach((star, i) => {
+      const twinkle = Math.sin(elapsed * 0.003 + i * 1.7) * 0.3 + 0.5;
+      star.setAttribute('opacity', twinkle);
+    });
+
+    requestAnimationFrame(animate);
+  }
+
+  requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>

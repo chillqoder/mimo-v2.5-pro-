@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Low-Poly Mage</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            overflow: hidden;
+            background: #1a0a2e;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            z-index: 10;
+        }
+        .btn {
+            background: linear-gradient(135deg, #6b3fa0, #8b5cf6);
+            border: 2px solid #a78bfa;
+            color: #e0d7ff;
+            padding: 12px 28px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+        }
+        .btn:hover {
+            background: linear-gradient(135deg, #7c3aed, #a78bfa);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+        }
+        .btn.active {
+            background: linear-gradient(135deg, #06b6d4, #22d3ee);
+            border-color: #67e8f9;
+            color: #0e1a2b;
+            box-shadow: 0 4px 20px rgba(6, 182, 212, 0.5);
+        }
+        #title {
+            position: absolute;
+            top: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #c4b5fd;
+            font-size: 24px;
+            font-weight: 300;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            text-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+            z-index: 10;
+        }
+        #info {
+            position: absolute;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #7c3aed;
+            font-size: 13px;
+            letter-spacing: 2px;
+            opacity: 0.7;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div id="title">Arcane Mage</div>
+    <div id="info">Low-Poly Character • Three.js</div>
+    <div id="ui">
+        <button class="btn active" onclick="setAnimation('idle')">Idle</button>
+        <button class="btn" onclick="setAnimation('cast')">Cast Spell</button>
+        <button class="btn" onclick="setAnimation('float')">Float</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Scene Setup
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a0a2e);
+        scene.fog = new THREE.FogExp2(0x1a0a2e, 0.035);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(4, 4, 8);
+        camera.lookAt(0, 2, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x4a2c82, 0.4);
+        scene.add(ambientLight);
+
+        const mainLight = new THREE.DirectionalLight(0xffe4c4, 0.8);
+        mainLight.position.set(5, 8, 5);
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 2048;
+        mainLight.shadow.mapSize.height = 2048;
+        mainLight.shadow.camera.near = 0.5;
+        mainLight.shadow.camera.far = 50;
+        mainLight.shadow.camera.left = -10;
+        mainLight.shadow.camera.right = 10;
+        mainLight.shadow.camera.top = 10;
+        mainLight.shadow.camera.bottom = -10;
+        scene.add(mainLight);
+
+        const fillLight = new THREE.DirectionalLight(0x6b5bff, 0.3);
+        fillLight.position.set(-3, 4, -3);
+        scene.add(fillLight);
+
+        const pointLight = new THREE.PointLight(0x06b6d4, 0, 15);
+        pointLight.position.set(0, 4, 0);
+        scene.add(pointLight);
+
+        // Floor
+        const floorGeo = new THREE.CircleGeometry(12, 32);
+        const floorMat = new THREE.MeshStandardMaterial({
+            color: 0x1a0a2e,
+            roughness: 0.8,
+            metalness: 0.2,
+        });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // Floor grid pattern
+        const gridHelper = new THREE.GridHelper(12, 24, 0x4a2c82, 0x2d1b69);
+        gridHelper.position.y = 0.01;
+        gridHelper.material.opacity = 0.3;
+        gridHelper.material.transparent = true;
+        scene.add(gridHelper);
+
+        // Materials
+        const robeMat = new THREE.MeshStandardMaterial({
+            color: 0x5b21b6,
+            roughness: 0.7,
+            metalness: 0.1,
+            flatShading: true
+        });
+
+        const robeTrimMat = new THREE.MeshStandardMaterial({
+            color: 0x7c3aed,
+            roughness: 0.5,
+            metalness: 0.2,
+            flatShading: true
+        });
+
+        const hatMat = new THREE.MeshStandardMaterial({
+            color: 0x6d28d9,
+            roughness: 0.6,
+            metalness: 0.15,
+            flatShading: true
+        });
+
+        const skinMat = new THREE.MeshStandardMaterial({
+            color: 0xfbbf8a,
+            roughness: 0.8,
+            metalness: 0,
+            flatShading: true
+        });
+
+        const staffMat = new THREE.MeshStandardMaterial({
+            color: 0x8b6914,
+            roughness: 0.6,
+            metalness: 0.3,
+            flatShading: true
+        });
+
+        const staffCrystalMat = new THREE.MeshStandardMaterial({
+            color: 0x22d3ee,
+            roughness: 0.2,
+            metalness: 0.8,
+            emissive: 0x06b6d4,
+            emissiveIntensity: 0.8,
+            flatShading: true
+        });
+
+        const eyeMat = new THREE.MeshStandardMaterial({
+            color: 0x22d3ee,
+            emissive: 0x06b6d4,
+            emissiveIntensity: 0.5,
+        });
+
+        const beltMat = new THREE.MeshStandardMaterial({
+            color: 0x92400e,
+            roughness: 0.5,
+            metalness: 0.4,
+            flatShading: true
+        });
+
+        const beltBuckleMat = new THREE.MeshStandardMaterial({
+            color: 0xfbbf24,
+            roughness: 0.3,
+            metalness: 0.8,
+            emissive: 0xfbbf24,
+            emissiveIntensity: 0.2,
+            flatShading: true
+        });
+
+        // Create Mage Group
+        const mage = new THREE.Group();
+
+        // Body / Robe
+        const robeGeo = new THREE.CylinderGeometry(0.3, 0.9, 2.2, 6);
+        const robe = new THREE.Mesh(robeGeo, robeMat);
+        robe.position.y = 1.1;
+        robe.castShadow = true;
+        mage.add(robe);
+
+        // Robe flare bottom
+        const robeBottomGeo = new THREE.CylinderGeometry(0.9, 1.1, 0.4, 6);
+        const robeBottom = new THREE.Mesh(robeBottomGeo, robeTrimMat);
+        robeBottom.position.y = 0.2;
+        robeBottom.castShadow = true;
+        mage.add(robeBottom);
+
+        // Robe collar
+        const collarGeo = new THREE.CylinderGeometry(0.45, 0.3, 0.3, 6);
+        const collar = new THREE.Mesh(collarGeo, robeTrimMat);
+        collar.position.y = 2.35;
+        collar.castShadow = true;
+        mage.add(collar);
+
+        // Belt
+        const beltGeo = new THREE.TorusGeometry(0.55, 0.06, 4, 6);
+        const belt = new THREE.Mesh(beltGeo, beltMat);
+        belt.position.y = 1.6;
+        belt.rotation.x = Math.PI / 2;
+        mage.add(belt);
+
+        // Belt buckle
+        const buckleGeo = new THREE.BoxGeometry(0.15, 0.15, 0.08);
+        const buckle = new THREE.Mesh(buckleGeo, beltBuckleMat);
+        buckle.position.set(0, 1.6, 0.55);
+        mage.add(buckle);
+
+        // Head
+        const headGeo = new THREE.SphereGeometry(0.35, 6, 5);
+        const head = new THREE.Mesh(headGeo, skinMat);
+        head.position.y = 2.7;
+        head.castShadow = true;
+        mage.add(head);
+
+        // Eyes
+        const eyeGeo = new THREE.SphereGeometry(0.06, 4, 4);
+
+        const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+        leftEye.position.set(-0.12, 2.75, 0.3);
+        mage.add(leftEye);
+
+        const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+        rightEye.position.set(0.12, 2.75, 0.3);
+        mage.add(rightEye);
+
+        // Nose
+        const noseGeo = new THREE.ConeGeometry(0.04, 0.1, 3);
+        const nose = new THREE.Mesh(noseGeo, skinMat);
+        nose.position.set(0, 2.68, 0.35);
+        nose.rotation.x = -Math.PI / 6;
+        mage.add(nose);
+
+        // Beard
+        const beardGeo = new THREE.ConeGeometry(0.2, 0.6, 4);
+        const beardMat = new THREE.MeshStandardMaterial({
+            color: 0xe2e8f0,
+            roughness: 0.9,
+            flatShading: true
+        });
+        const beard = new THREE.Mesh(beardGeo, beardMat);
+        beard.position.set(0, 2.35, 0.15);
+        beard.rotation.x = Math.PI / 8;
+        mage.add(beard);
+
+        // Hat
+        const hatBrimGeo = new THREE.CylinderGeometry(0.6, 0.65, 0.1, 6);
+        const hatBrim = new THREE.Mesh(hatBrimGeo, hatMat);
+        hatBrim.position.y = 2.95;
+        hatBrim.castShadow = true;
+        mage.add(hatBrim);
+
+        const hatConeGeo = new THREE.ConeGeometry(0.4, 1.2, 6);
+        const hatCone = new THREE.Mesh(hatConeGeo, hatMat);
+        hatCone.position.y = 3.6;
+        hatCone.castShadow = true;
+        mage.add(hatCone);
+
+        // Hat tip (slightly droopy)
+        const hatTipGeo = new THREE.ConeGeometry(0.08, 0.4, 4);
+        const hatTip = new THREE.Mesh(hatTipGeo, robeTrimMat);
+        hatTip.position.set(0.1, 4.2, 0);
+        hatTip.rotation.z = Math.PI / 6;
+        mage.add(hatTip);
+
+        // Hat band
+        const hatBandGeo = new THREE.TorusGeometry(0.42, 0.04, 4, 6);
+        const hatBand = new THREE.Mesh(hatBandGeo, robeTrimMat);
+        hatBand.position.y = 3.1;
+        hatBand.rotation.x = Math.PI / 2;
+        mage.add(hatBand);
+
+        // Arms
+        const armGeo = new THREE.CylinderGeometry(0.08, 0.12, 1.2, 4);
+
+        // Left arm
+        const leftArmGroup = new THREE.Group();
+        leftArmGroup.position.set(-0.45, 2.0, 0);
+        const leftArm = new THREE.Mesh(armGeo, robeTrimMat);
+        leftArm.position.y = -0.5;
+        leftArm.castShadow = true;
+        leftArmGroup.add(leftArm);
+
+        // Left hand
+        const handGeo = new THREE.SphereGeometry(0.1, 4, 4);
+        const leftHand = new THREE.Mesh(handGeo, skinMat);
+        leftHand.position.y = -1.1;
+        leftArmGroup.add(leftHand);
+        mage.add(leftArmGroup);
+
+        // Right arm (holds staff)
+        const rightArmGroup = new THREE.Group();
+        rightArmGroup.position.set(0.45, 2.0, 0);
+        const rightArm = new THREE.Mesh(armGeo, robeTrimMat);
+        rightArm.position.y = -0.5;
+        rightArm.castShadow = true;
+        rightArmGroup.add(rightArm);
+
+        const rightHand = new THREE.Mesh(handGeo, skinMat);
+        rightHand.position.y = -1.1;
+        rightArmGroup.add(rightHand);
+        mage.add(rightArmGroup);
+
+        // Staff
+        const staffGroup = new THREE.Group();
+
+        const staffShaftGeo = new THREE.CylinderGeometry(0.05, 0.06, 3.5, 5);
+        const staffShaft = new THREE.Mesh(staffShaftGeo, staffMat);
+        staffShaft.castShadow = true;
+        staffGroup.add(staffShaft);
+
+        // Staff top ornament
+        const staffOrbGeo = new THREE.OctahedronGeometry(0.2, 0);
+        const staffOrb = new THREE.Mesh(staffOrbGeo, staffCrystalMat);
+        staffOrb.position.y = 1.85;
+        staffGroup.add(staffOrb);
+
+        // Staff prongs
+        const prongGeo = new THREE.ConeGeometry(0.04, 0.3, 3);
+        for (let i = 0; i < 3; i++) {
+            const prong = new THREE.Mesh(prongGeo, staffMat);
+            const angle = (i / 3) * Math.PI * 2;
+            prong.position.set(Math.cos(angle) * 0.15, 1.5, Math.sin(angle) * 0.15);
+            prong.rotation.z = Math.cos(angle) * 0.3;
+            prong.rotation.x = Math.sin(angle) * 0.3;
+            staffGroup.add(prong);
+        }
+
+        // Staff base cap
+        const staffCapGeo = new THREE.SphereGeometry(0.08, 4, 4);
+        const staffCap = new THREE.Mesh(staffCapGeo, staffMat);
+        staffCap.position.y = -1.75;
+        staffGroup.add(staffCap);
+
+        staffGroup.position.set(0.6, 1.2, 0.2);
+        staffGroup.rotation.z = -0.15;
+        mage.add(staffGroup);
+
+        // Add mage to scene
+        mage.position.y = 0;
+        scene.add(mage);
+
+        // Particle System for Magic Effect
+        const particleCount = 200;
+        const particlesGeo = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        const velocities = [];
+        const lifetimes = [];
+        const particleColors = new Float32Array(particleCount * 3);
+
+        const cyanColor = new THREE.Color(0x22d3ee);
+        const purpleColor = new THREE.Color(0xa78bfa);
+
+        for (let i = 0; i < particleCount; i++) {
+            positions[i * 3] = 0;
+            positions[i * 3 + 1] = 0;
+            positions[i * 3 + 2] = 0;
+
+            velocities.push({
+                x: (Math.random() - 0.5) * 0.1,
+                y: Math.random() * 0.08 + 0.02,
+                z: (Math.random() - 0.5) * 0.1
+            });
+            lifetimes.push(Math.random());
+
+            const color = Math.random() > 0.5 ? cyanColor : purpleColor;
+            particleColors[i * 3] = color.r;
+            particleColors[i * 3 + 1] = color.g;
+            particleColors[i * 3 + 2] = color.b;
+        }
+
+        particlesGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        particlesGeo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
+
+        const particleMat = new THREE.PointsMaterial({
+            size: 0.12,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        const particles = new THREE.Points(particlesGeo, particleMat);
+        particles.visible = false;
+        scene.add(particles);
+
+        // Ambient floating particles
+        const ambientParticleCount = 50;
+        const ambientGeo = new THREE.BufferGeometry();
+        const ambientPositions = new Float32Array(ambientParticleCount * 3);
+        const ambientVelocities = [];
+
+        for (let i = 0; i < ambientParticleCount; i++) {
+            ambientPositions[i * 3] = (Math.random() - 0.5) * 10;
+            ambientPositions[i * 3 + 1] = Math.random() * 6;
+            ambientPositions[i * 3 + 2] = (Math.random() - 0.5) * 10;
+
+            ambientVelocities.push({
+                x: (Math.random() - 0.5) * 0.005,
+                y: Math.random() * 0.005 + 0.002,
+                z: (Math.random() - 0.5) * 0.005
+            });
+        }
+
+        ambientGeo.setAttribute('position', new THREE.BufferAttribute(ambientPositions, 3));
+
+        const ambientMat = new THREE.PointsMaterial({
+            size: 0.06,
+            color: 0x7c3aed,
+            transparent: true,
+            opacity: 0.4,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        const ambientParticles = new THREE.Points(ambientGeo, ambientMat);
+        scene.add(ambientParticles);
+
+        // Magic circle on floor
+        const circleGeo = new THREE.RingGeometry(0.8, 1.0, 6);
+        const circleMat = new THREE.MeshStandardMaterial({
+            color: 0x06b6d4,
+            emissive: 0x06b6d4,
+            emissiveIntensity: 0.5,
+            transparent: true,
+            opacity: 0,
+            side: THREE.DoubleSide,
+            flatShading: true
+        });
+        const magicCircle = new THREE.Mesh(circleGeo, circleMat);
+        magicCircle.rotation.x = -Math.PI / 2;
+        magicCircle.position.y = 0.02;
+        scene.add(magicCircle);
+
+        const innerCircleGeo = new THREE.RingGeometry(0.4, 0.5, 6);
+        const innerCircle = new THREE.Mesh(innerCircleGeo, circleMat.clone());
+        innerCircle.rotation.x = -Math.PI / 2;
+        innerCircle.position.y = 0.02;
+        scene.add(innerCircle);
+
+        // Animation State
+        let currentAnimation = 'idle';
+        let animationTime = 0;
+        let castTimer = 0;
+        const clock = new THREE.Clock();
+
+        function setAnimation(anim) {
+            currentAnimation = anim;
+            document.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            if (anim === 'cast') {
+                particles.visible = true;
+                castTimer = 0;
+            }
+        }
+
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            animationTime += delta;
+
+            // Idle breathing animation
+            if (currentAnimation === 'idle') {
+                const breathe = Math.sin(animationTime * 1.5) * 0.05;
+                mage.position.y = breathe;
+                mage.rotation.y = Math.sin(animationTime * 0.3) * 0.1;
+
+                // Staff subtle movement
+                staffGroup.rotation.z = -0.15 + Math.sin(animationTime * 1.2) * 0.03;
+                staffGroup.rotation.x = Math.sin(animationTime * 0.8) * 0.02;
+
+                // Robe sway
+                robeBottom.rotation.y = Math.sin(animationTime * 0.7) * 0.02;
+
+                // Arm sway
+                leftArmGroup.rotation.z = Math.sin(animationTime * 1.0) * 0.05;
+                rightArmGroup.rotation.z = -Math.sin(animationTime * 1.0) * 0.03;
+
+                // Eye glow pulse
+                const eyePulse = 0.5 + Math.sin(animationTime * 2) * 0.2;
+                eyeMat.emissiveIntensity = eyePulse;
+                staffCrystalMat.emissiveIntensity = 0.6 + Math.sin(animationTime * 2) * 0.2;
+
+                // Magic circle fade
+                circleMat.opacity = THREE.MathUtils.lerp(circleMat.opacity, 0, delta * 2);
+                innerCircle.material.opacity = circleMat.opacity;
+
+                // Point light
+                pointLight.intensity = THREE.MathUtils.lerp(pointLight.intensity, 0, delta * 2);
+            }
+
+            // Float animation
+            if (currentAnimation === 'float') {
+                const floatY = Math.sin(animationTime * 1.0) * 0.3 + 0.3;
+                mage.position.y = floatY;
+                mage.rotation.y += delta * 0.5;
+
+                staffGroup.rotation.z = -0.15 + Math.sin(animationTime * 1.5) * 0.1;
+                staffGroup.rotation.x = Math.sin(animationTime) * 0.05;
+
+                leftArmGroup.rotation.z = Math.sin(animationTime * 1.2) * 0.15 - 0.1;
+                rightArmGroup.rotation.z = -Math.sin(animationTime * 1.2) * 0.15 + 0.1;
+
+                const eyePulse = 0.7 + Math.sin(animationTime * 3) * 0.3;
+                eyeMat.emissiveIntensity = eyePulse;
+                staffCrystalMat.emissiveIntensity = 0.8 + Math.sin(animationTime * 3) * 0.2;
+
+                circleMat.opacity = THREE.MathUtils.lerp(circleMat.opacity, 0.5, delta * 2);
+                innerCircle.material.opacity = circleMat.opacity * 0.8;
+                innerCircle.rotation.z += delta;
+
+                pointLight.intensity = THREE.MathUtils.lerp(pointLight.intensity, 1, delta * 2);
+                pointLight.position.y = 4 + floatY;
+            }
+
+            // Cast animation
+            if (currentAnimation === 'cast') {
+                castTimer += delta;
+
+                // Wind up phase (0-0.5s)
+                if (castTimer < 0.5) {
+                    const t = castTimer / 0.5;
+                    mage.position.y = t * 0.1;
+                    rightArmGroup.rotation.z = THREE.MathUtils.lerp(0, -0.8, t);
+                    rightArmGroup.rotation.x = THREE.MathUtils.lerp(0, -0.5, t);
+                    staffGroup.rotation.z = THREE.MathUtils.lerp(-0.15, 0.3, t);
+                }
+                // Cast phase (0.5-1.0s)
+                else if (castTimer < 1.0) {
+                    const t = (castTimer - 0.5) / 0.5;
+                    mage.position.y = 0.1 + Math.sin(t * Math.PI) * 0.15;
+                    rightArmGroup.rotation.z = THREE.MathUtils.lerp(-0.8, -1.2, t);
+                    staffGroup.rotation.z = THREE.MathUtils.lerp(0.3, -0.2, t);
+
+                    eyeMat.emissiveIntensity = 1.0;
+                    staffCrystalMat.emissiveIntensity = 1.0;
+
+                    pointLight.intensity = THREE.MathUtils.lerp(1, 3, t);
+                    pointLight.position.set(0.6, 3, 0.2);
+
+                    circleMat.opacity = THREE.MathUtils.lerp(0, 1, t);
+                    innerCircle.material.opacity = circleMat.opacity;
+                }
+                // Release and settle (1.0-2.0s)
+                else if (castTimer < 2.0) {
+                    const t = (castTimer - 1.0) / 1.0;
+                    mage.position.y = THREE.MathUtils.lerp(0.25, 0, t * t);
+                    rightArmGroup.rotation.z = THREE.MathUtils.lerp(-1.2, 0, t);
+                    rightArmGroup.rotation.x = THREE.MathUtils.lerp(-0.5, 0, t);
+                    staffGroup.rotation.z = THREE.MathUtils.lerp(-0.2, -0.15, t);
+
+                    eyeMat.emissiveIntensity = THREE.MathUtils.lerp(1.0, 0.5, t);
+                    staffCrystalMat.emissiveIntensity = THREE.MathUtils.lerp(1.0, 0.6, t);
+
+                    pointLight.intensity = THREE.MathUtils.lerp(3, 0, t);
+                    circleMat.opacity = THREE.MathUtils.lerp(1, 0, t);
+                    innerCircle.material.opacity = circleMat.opacity;
+                }
+                // Loop back
+                else {
+                    castTimer = 0;
+                }
+
+                // Update particles during cast
+                if (particles.visible) {
+                    const posArr = particles.geometry.attributes.position.array;
+                    const orbPos = new THREE.Vector3(0.6, 3, 0.2);
+                    orbPos.applyMatrix4(mage.matrixWorld);
+
+                    for (let i = 0; i < particleCount; i++) {
+                        lifetimes[i] -= delta * 2;
+
+                        if (lifetimes[i] <= 0) {
+                            lifetimes[i] = 1;
+                            posArr[i * 3] = orbPos.x + (Math.random() - 0.5) * 0.3;
+                            posArr[i * 3 + 1] = orbPos.y + (Math.random() - 0.5) * 0.3;
+                            posArr[i * 3 + 2] = orbPos.z + (Math.random() - 0.5) * 0.3;
+
+                            velocities[i].x = (Math.random() - 0.5) * 0.15;
+                            velocities[i].y = Math.random() * 0.1 + 0.03;
+                            velocities[i].z = (Math.random() - 0.5) * 0.15;
+                        }
+
+                        posArr[i * 3] += velocities[i].x;
+                        posArr[i * 3 + 1] += velocities[i].y;
+                        posArr[i * 3 + 2] += velocities[i].z;
+
+                        velocities[i].y -= 0.001;
+                    }
+
+                    particles.geometry.attributes.position.needsUpdate = true;
+                }
+            } else {
+                particles.visible = false;
+            }
+
+            // Ambient particles
+            const ambArr = ambientParticles.geometry.attributes.position.array;
+            for (let i = 0; i < ambientParticleCount; i++) {
+                ambArr[i * 3] += ambientVelocities[i].x;
+                ambArr[i * 3 + 1] += ambientVelocities[i].y;
+                ambArr[i * 3 + 2] += ambientVelocities[i].z;
+
+                if (ambArr[i * 3 + 1] > 6) {
+                    ambArr[i * 3] = (Math.random() - 0.5) * 10;
+                    ambArr[i * 3 + 1] = 0;
+                    ambArr[i * 3 + 2] = (Math.random() - 0.5) * 10;
+                }
+            }
+            ambientParticles.geometry.attributes.position.needsUpdate = true;
+
+            // Staff orb rotation
+            staffOrb.rotation.y += delta * 2;
+            staffOrb.rotation.x += delta;
+
+            renderer.render(scene, camera);
+        }
+
+        // Window Resize Handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Mouse interaction for camera
+        let mouseX = 0, mouseY = 0;
+        document.addEventListener('mousemove', (e) => {
+            mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+            mouseY = (e.clientY / window.innerHeight) * 2 - 1;
+        });
+
+        function updateCamera() {
+            requestAnimationFrame(updateCamera);
+            const targetX = 4 + mouseX * 2;
+            const targetY = 4 + mouseY * -1;
+            camera.position.x += (targetX - camera.position.x) * 0.02;
+            camera.position.y += (targetY - camera.position.y) * 0.02;
+            camera.lookAt(0, 2, 0);
+        }
+
+        updateCamera();
+        animate();
+    </script>
+</body>
+</html>
